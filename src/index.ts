@@ -4,6 +4,8 @@ import { Command } from 'commander';
 import { XMLParser, XMLBuilder, XMLValidator } from "fast-xml-parser";
 import { DateTime } from 'luxon'
 import iconv from 'iconv-lite'
+import { AwakeTiger2 } from './awakeTigers';
+
 
 class AwakeTiger {
     inputPath: string
@@ -24,9 +26,12 @@ class AwakeTiger {
 
     async readAndParseInput() {
         try {
+            const codeData = await fs.promises.readFile(this.outputForCode, 'utf8')
+            const codeObj = JSON.parse(codeData)
+
             const data = await fs.promises.readFile(this.inputPath, 'utf8')
             const jObj = this._parseToJson(data)
-            const parsed = this._parse(jObj)
+            const parsed = this._parse(jObj, codeObj)
             const html = this._buildHtml(parsed)
             await fs.promises.writeFile(this.output, html, 'utf8')
         } catch (err) {
@@ -124,7 +129,31 @@ class AwakeTiger {
         return stockCodes
     }
 
-    _parse(jObj: any) {
+    _outputTd(
+        dataEl: { br: any, a: any, '#text': string, '@_class': string },
+        no: number,
+        codeObj: any
+    ) {
+        const resGroup = /:\s*(.*?)\(/.exec(dataEl.br[0])
+        return {
+            td: [
+                { '@_class': 'no', '#text': no },
+                { '@_class': dataEl['@_class'], '#text': dataEl['#text'] },
+                { '@_class': 'company', '#text': dataEl.br[0] },
+                { '@_class': 'report_type', '#text': dataEl.br[1] },
+                { pre: dataEl.br.slice(2, -1).join('\n') },
+                {
+                    div: {
+                        '#text': dataEl.br[dataEl.br.length - 1],
+                        a: dataEl.a
+                    }
+                },
+                { '#text': (resGroup) ? codeObj[resGroup[1]] : 'none' }
+            ]
+        }
+    }
+
+    _parse(jObj: any, codeObj: any) {
         let resmsg = ''
         const resTable: any = {
             table: { tr: [] }
@@ -142,22 +171,11 @@ class AwakeTiger {
                 // {div: Array(2), @_class: 'body'}
                 const lastDiv = curObj.div[curObj.div.length - 1]
                 if (this._checkRevenueAndProfit(lastDiv)) {
+                    // output format
                     resCount++
-                    resTable.table.tr.push({
-                        td: [
-                            { '@_class': 'no', '#text': resCount },
-                            { '@_class': lastDiv['@_class'], '#text': lastDiv['#text'] },
-                            { '@_class': 'company', '#text': lastDiv.br[0] },
-                            { '@_class': 'report_type', '#text': lastDiv.br[1] },
-                            { pre: lastDiv.br.slice(2, -1).join('\n') },
-                            {
-                                div: {
-                                    '#text': lastDiv.br[lastDiv.br.length - 1],
-                                    a: lastDiv.a
-                                }
-                            }
-                        ]
-                    })
+                    resTable.table.tr.push(
+                        this._outputTd(lastDiv, resCount, codeObj)
+                    )
                 }
 
                 return
@@ -212,9 +230,6 @@ class AwakeTiger {
 function doSomething(keystOption: any) {
     console.log(keystOption)
 }
-function help(){
-    
-}
 
 async function main() {
     const program = new Command();
@@ -223,6 +238,7 @@ async function main() {
         .name('awake-tiger')
         .usage('[OPTIONS]...')
         .option('-f, --filepath <file_path>', 'filepath of input file')
+        .option('-o, --output-path <file_path>', 'filepath of outut file')
         .option('-cl, --code-list <file_path>', 'generate code list')
         // .option('-kv, --keyvalue <log_file>,<key_file>', 'extract keys from a log')
         .parse(process.argv);
@@ -230,11 +246,15 @@ async function main() {
     const options = program.opts();
 
     if ('codeList' in options) {
-        const lkoala = new AwakeTiger()
+        const lkoala = new AwakeTiger2()
         await lkoala.readStockCodeList(options.codeList)
         return
     } else if ('filepath' in options) {
-        const atiger = new AwakeTiger(options.filepath)
+        let outputPath = ''
+        if('outputPath' in options) {
+            outputPath = options.outputPath
+        }
+        const atiger = new AwakeTiger2(options.filepath, outputPath)
         await atiger.readAndParseInput()
         return
     }

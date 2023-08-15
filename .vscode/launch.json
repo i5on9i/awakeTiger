@@ -16,7 +16,8 @@
                 "${workspaceFolder}/**/*.js"
             ],
             "args": [
-                "--code-list",
+                // "--code-list",
+                // "f:\\상장법인목록.xls",
                 "-f",
                 "d:\\a\\downloads\\Telegram\\ChatExport_2023-08-14\\messages.html"
             ]
