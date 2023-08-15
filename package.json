@@ -1,0 +1,25 @@
+{
+  "name": "awakeTiger",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "build": "tsc -p tsconfig.json",
+    "twatch": "tsc --watch",
+    "prod": "node ./dist/index.js"
+  },
+  "author": "namh",
+  "license": "ISC",
+  "devDependencies": {
+    "@types/commander": "^2.12.2",
+    "@types/node": "^20.5.0",
+    "typescript": "^5.1.6"
+  },
+  "dependencies": {
+    "@types/luxon": "^3.3.1",
+    "commander": "^11.0.0",
+    "fast-xml-parser": "^4.2.7",
+    "luxon": "^3.4.0"
+  }
+}
