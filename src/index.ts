@@ -3,6 +3,7 @@ import * as fs from 'fs';
 import { Command } from 'commander';
 import { XMLParser, XMLBuilder, XMLValidator } from "fast-xml-parser";
 import { DateTime } from 'luxon'
+import iconv from 'iconv-lite'
 
 class AwakeTiger {
     inputPath: string
@@ -10,11 +11,13 @@ class AwakeTiger {
     quarterPreYear: string
     reportNameRegex: RegExp;
     output: string;
+    outputForCode: string;
 
-    constructor(inputPath: string) {
+    constructor(inputPath: string = '') {
         this.inputPath = inputPath
         this.reportNameRegex = /: (.*?보고서|.*?재무제표기준|영업|매출액또는손익구조)/
         this.output = './output.html'
+        this.outputForCode = './stockcode.json'
         this.quaterCurrent = '2023.2Q'
         this.quarterPreYear = '2022.2Q'
     }
@@ -26,6 +29,17 @@ class AwakeTiger {
             const parsed = this._parse(jObj)
             const html = this._buildHtml(parsed)
             await fs.promises.writeFile(this.output, html, 'utf8')
+        } catch (err) {
+            return console.error('Error reading file:', err);
+        }
+    }
+    async readStockCodeList(inputPath) {
+        try {
+            const data = await fs.promises.readFile(inputPath)
+            const utf8Data = iconv.decode(data, 'euc-kr')
+            const jObj = this._parseToJson(utf8Data)
+            const parsedObj = this._parseForCode(jObj)
+            await fs.promises.writeFile(this.outputForCode, JSON.stringify(parsedObj, null, 2), 'utf8')
         } catch (err) {
             return console.error('Error reading file:', err);
         }
@@ -97,12 +111,26 @@ class AwakeTiger {
         }
         return false
     }
+
+    _genStockCodeObj(data: { td: any }[]): any {
+        const stockCodes = {}
+        const COMPANYNAME = 0
+        const STOCKCODE = 1
+        const dataLen = data.length;
+        for (let i = 1; i < dataLen; i++) {
+            const tr = data[i];
+            stockCodes[tr.td[COMPANYNAME]] = tr.td[STOCKCODE]['#text']
+        }
+        return stockCodes
+    }
+
     _parse(jObj: any) {
         let resmsg = ''
         const resTable: any = {
-            table: { tr: []}
+            table: { tr: [] }
         }
-        const _ = (curObj: any, key) => {
+        let resCount = 0
+        const _ = (curObj: any, key: string) => {
             if (key === 'head') {
                 // if curObj is head, skip
                 return
@@ -113,17 +141,21 @@ class AwakeTiger {
                 resmsg += curObj.msg
                 // {div: Array(2), @_class: 'body'}
                 const lastDiv = curObj.div[curObj.div.length - 1]
-                if (this._checkRevenueAndProfit(lastDiv) {
+                if (this._checkRevenueAndProfit(lastDiv)) {
+                    resCount++
                     resTable.table.tr.push({
                         td: [
+                            { '@_class': 'no', '#text': resCount },
                             { '@_class': lastDiv['@_class'], '#text': lastDiv['#text'] },
                             { '@_class': 'company', '#text': lastDiv.br[0] },
                             { '@_class': 'report_type', '#text': lastDiv.br[1] },
                             { pre: lastDiv.br.slice(2, -1).join('\n') },
-                            { div: {
-                                '#text': lastDiv.br[lastDiv.br.length - 1],
-                                a: lastDiv.a
-                            }}
+                            {
+                                div: {
+                                    '#text': lastDiv.br[lastDiv.br.length - 1],
+                                    a: lastDiv.a
+                                }
+                            }
                         ]
                     })
                 }
@@ -144,9 +176,44 @@ class AwakeTiger {
         _(jObj, 'root')
         return resTable
     }
+
+    _parseForCode(jObj: any) {
+
+        let resmsg = ''
+        let trVal: any = null
+        let resCount = 0
+        const _ = (curObj: any, key: string) => {
+            if (key === 'head' || trVal) {
+                // if curObj is head, skip
+                // or result has been found.
+                return
+            }
+            if (key === 'tr') {
+                trVal = curObj
+                return
+            }
+            // traverse
+            if (typeof curObj === "object") {
+                for (const key in curObj) {
+                    if (key.startsWith('@')) {
+                        continue
+                    }
+                    _(curObj[key], key);
+                }
+            }
+        }
+        _(jObj, 'root')
+
+        const stockCodes = this._genStockCodeObj(trVal)
+
+        return stockCodes
+    }
 }
 function doSomething(keystOption: any) {
     console.log(keystOption)
+}
+function help(){
+    
 }
 
 async function main() {
@@ -156,17 +223,23 @@ async function main() {
         .name('awake-tiger')
         .usage('[OPTIONS]...')
         .option('-f, --filepath <file_path>', 'filepath of input file')
-        .option('-kd, --keydiff <value>,<value>', 'diff target files')
-        .option('-kv, --keyvalue <log_file>,<key_file>', 'extract keys from a log')
+        .option('-cl, --code-list <file_path>', 'generate code list')
+        // .option('-kv, --keyvalue <log_file>,<key_file>', 'extract keys from a log')
         .parse(process.argv);
 
     const options = program.opts();
 
-    if ('filepath' in options) {
+    if ('codeList' in options) {
+        const lkoala = new AwakeTiger()
+        await lkoala.readStockCodeList(options.codeList)
+        return
+    } else if ('filepath' in options) {
         const atiger = new AwakeTiger(options.filepath)
         await atiger.readAndParseInput()
         return
     }
+
+
 
 }
 
