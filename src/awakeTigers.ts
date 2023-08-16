@@ -103,7 +103,7 @@ export class AwakeTiger2 {
     }
 
     _getNumber(text: string) {
-        return Number(text.replace(/[^0-9]/g, ''))
+        return Number(text.replace(/[^\-0-9]/g, ''))
     }
 
     _checkRevenueAndProfit(textLines: string[]) {
