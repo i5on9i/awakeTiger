@@ -8,19 +8,21 @@ import HTMLParser from 'node-html-parser';
 
 export class AwakeTiger2 {
     inputPath: string
-    quaterCurrent: string
+    quarterCurrent: string
     quarterPreYear: string
     reportNameRegex: RegExp;
     output: string;
     outputForCode: string;
 
-    constructor(inputPath: string = '', outputPath: string = '') {
+    constructor(inputPath: string = '', outputPath: string = '', quarterCurrent: string | null = null, quarterPreYear: string | null = null) {
         this.inputPath = inputPath
-        this.reportNameRegex = /: (.*?보고서|.*?재무제표기준|영업|매출액또는손익구조)/
+        this.reportNameRegex = /: (.*?기보고서|.*?재무제표기준|영업|매출액또는손익구조)/
         this.output = (outputPath) ? outputPath : './output.html'
         this.outputForCode = './stockcode.json'
-        this.quaterCurrent = '2023.2Q'
-        this.quarterPreYear = '2022.2Q'
+        const qstrs = this._getQuaterStrings(quarterCurrent, quarterPreYear);
+
+        this.quarterCurrent = qstrs.quarterCurrent // '2023.3Q'
+        this.quarterPreYear = qstrs.quarterPreYear //'2022.3Q'
     }
 
     async readAndParseInput() {
@@ -102,20 +104,47 @@ export class AwakeTiger2 {
         return res
     }
 
+    _getQuaterStrings(quarterCurrent: string | null = null, quarterPreYear: string | null = null)
+        : { quarterCurrent: string, quarterPreYear: string } {
+        if (quarterCurrent != null && quarterPreYear != null) {
+            return {
+                quarterCurrent,
+                quarterPreYear
+            }
+        }
+        let quarter
+        const now = new Date();
+        let year = now.getFullYear()
+        let month = now.getMonth()
+        if (month >= 0 && month <= 2) {
+            year -= 1
+            quarter = '4Q';
+        } else if (month >= 3 && month <= 5) {
+            quarter = '1Q';
+        } else if (month >= 6 && month <= 8) {
+            quarter = '2Q';
+        } else if (month >= 9 && month <= 11) {
+            quarter = '3Q';
+        }
+        return {
+            quarterCurrent: `${year}.${quarter}`,
+            quarterPreYear: `${year - 1}.${quarter}`
+        };
+    }
     _getNumber(text: string) {
         return Number(text.replace(/[^\-0-9]/g, ''))
     }
 
     _checkRevenueAndProfit(textLines: string[]) {
-        const qvalues = this._getQuaters(textLines, [this.quaterCurrent, this.quarterPreYear])
+        const qvalues = this._getQuaters(textLines, [this.quarterCurrent, this.quarterPreYear])
         if (!qvalues || Object.keys(qvalues).length <= 0) {
             return false
         }
 
         const REVENUE = 1
         const PROFIT = 2
-        if (this._getNumber(qvalues[this.quaterCurrent][REVENUE]) - this._getNumber(qvalues[this.quarterPreYear][REVENUE]) > 0
-            && this._getNumber(qvalues[this.quaterCurrent][PROFIT]) - this._getNumber(qvalues[this.quarterPreYear][PROFIT]) > 0) {
+        if (this._getNumber(qvalues[this.quarterCurrent][REVENUE]) - this._getNumber(qvalues[this.quarterPreYear][REVENUE]) > 0
+            && this._getNumber(qvalues[this.quarterCurrent][PROFIT]) - this._getNumber(qvalues[this.quarterPreYear][PROFIT]) > 0) {
             return true
         }
         return false
